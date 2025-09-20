@@ -42,7 +42,8 @@ end
 
 def only_one_output_connected?(session)
   one_connected = session['outputs'].any? { |_, output| output['connected'] }
-  (all_outputs_connected?(session) == false && one_connected) || (session['outputs'].count == 1)
+  connected_outputs = session['connected_outputs'].all? {|_, output| output['connected']}
+  (connected_outputs == false && one_connected) || session['connected_outputs'].count == 1
 end
 
 def disconnect_non_connected_outputs(session)
@@ -66,7 +67,7 @@ def i3_mode(mode)
 end
 
 def restore_session(session, current_session)
-  restore_outputs(session['outputs'], current_session['outputs'])
+  restore_outputs(session['outputs'], current_session['connected_outputs'])
   restore_i3(session['i3'])
 end
 
@@ -119,11 +120,29 @@ def restore_i3(i3state)
   i3_mode(i3state['mode'] || 'default')
 end
 
-def current_outputs
+def connected_outputs
   outputs = {}
   xrandr_output = `xrandr --query`
   xrandr_output.lines.each do |line|
-    next unless line =~ /^(\S+) (connected|disconnected)\s+(primary )?(\d+)x(\d+)\+(\d+)\+(\d+)/
+    next unless line =~ /^(\S+) (connected|disconnected)/
+
+    name = Regexp.last_match(1)
+    connected = !Regexp.last_match(2).to_s.include?('disconnected')
+    outputs[name] = {
+      'output' => name,
+      'connected' => connected
+    }
+  end
+
+  outputs.select{|_, output| output['connected']}
+end
+
+def current_outputs
+  outputs = {}
+  xrandr_output = `xrandr --query`
+  
+  xrandr_output.lines.each do |line|
+    next unless line =~ /^(\S+) (connected|disconnected)\s*(primary\s*)?(\d+)x(\d+)\+(\d+)\+(\d+)/
 
     name = Regexp.last_match(1)
     connected = !Regexp.last_match(2).to_s.include?('disconnected')
@@ -146,19 +165,20 @@ def current_outputs
 end
 
 def restore_outputs(outputs, current_outputs)
-  debug("restore_outputs current_outputs: #{current_outputs.inspect}")
+
   outputs.each do |name, output|
-    next !current_outputs[name]['connected']
+    next if current_outputs[name]['connected'] == false
+
     cmd = %(xrandr --output #{output['output']} --mode #{output['width']}x#{output['height']} --pos #{output['x']}x#{output['y']}#{if output['is_primary']
                                                                                                                                      ' --primary'
-                                                                                                                                   end})
+                                                                                                                                   end} --auto)
     error = `#{cmd} 2>&1 >/dev/null`
     puts error unless error.strip.empty?
   end
 end
 
 def current_session
-  { 'i3' => current_i3, 'outputs' => current_outputs }
+  { 'i3' => current_i3, 'outputs' => current_outputs, 'connected_outputs' => connected_outputs}
 end
 
 # Main
@@ -204,7 +224,7 @@ when :save
   exit
 when :restore
   if File.exist?(SESSION_PATH)
-    if load_session(SESSION_PATH)['outputs'].count != current_session()['outputs'].count
+    if load_session(SESSION_PATH)['outputs'].count != current_session()['connected_outputs'].count
       raise "Can't restore outputs"
     end
 
@@ -220,7 +240,7 @@ when :watch
     session = current_session
 
     debug("stage: #{stage}")
-
+    debug("stage_session: #{session.inspect}")
     case stage
     when :only_primary
       stage = if only_one_output_connected?(session)
@@ -229,7 +249,7 @@ when :watch
                 :restore_outputs
               end
     when :restore_outputs
-        restore_session(load_session(SESSION_PATH), session)
+      restore_session(load_session(SESSION_PATH), session)
       stage = :monitor_outputs
     when :wait_outputs
       stage = if all_outputs_connected?(session)
@@ -238,13 +258,13 @@ when :watch
                 :wait_outputs
               end
     when :monitor_outputs
-      dump_session(current_session, SESSION_PATH)
-      if all_outputs_connected?(session)
-        stage = :monitor_outputs
-      elsif only_one_output_connected?(session)
+      dump_session(session, SESSION_PATH)
+      if only_one_output_connected?(session)
         disconnect_non_connected_outputs(session)
         i3_mode('default')
         stage = :only_primary
+      elsif all_outputs_connected?(session)
+        stage = :monitor_outputs
       else
         stage = :wait_outputs
       end
