@@ -1,6 +1,6 @@
 # i3_session
 
-A simple Ruby script to manage i3 window manager sessions with multi-monitor support.
+A simple Ruby script that saves and restores your window layout to the respective monitors when they are unplugged or plugged back in.
 
 **Note:** The "watch" mode only works per session. If you log out or power off your machine, the script will not automatically restore the latest state when you log back in.
 
