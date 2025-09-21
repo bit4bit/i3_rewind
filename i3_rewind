@@ -59,12 +59,6 @@ def all_outputs_connected?(session)
   session['outputs'].all? { |_, output| output['connected'] }
 end
 
-def i3_mode(mode)
-  cmd = %(i3-msg mode "#{mode}")
-  error = `#{cmd} 2>&1 >/dev/null`
-  puts error unless error.strip.empty?
-end
-
 def restore_session(session, current_session)
   restore_outputs(session['outputs'], current_session['connected_outputs'])
   restore_i3(session['i3'])
@@ -116,7 +110,6 @@ def restore_i3(i3state)
     puts error unless error.strip.empty?
   end
 
-  i3_mode(i3state['mode'] || 'default')
 end
 
 def connected_outputs
