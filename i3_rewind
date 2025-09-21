@@ -1,12 +1,13 @@
 #!/usr/bin/env ruby
+#
 require 'json'
 require 'fileutils'
 require 'optparse'
 require 'etc'
 require 'fcntl'
 
-SESSION_PATH = "#{ENV['HOME']}/.config/i3/i3_rewind.json"
-LOCK_FILE = "/tmp/i3_rewind_#{Etc.getlogin}.lock"
+SESSION_PATH = "#{ENV['HOME']}/.config/i3/i3_rewind.json".freeze
+LOCK_FILE = "/tmp/i3_rewind_#{Etc.getlogin}.lock".freeze
 
 def debug(message)
   puts message if ENV['DEBUG']
@@ -181,6 +182,21 @@ def current_session
   { 'i3' => current_i3, 'outputs' => current_outputs, 'connected_outputs' => connected_outputs}
 end
 
+def shell_inform_transition(transition, script)
+  return if script.nil?
+
+  command_path = script || ENV['I3_REWIND_TRANSITION_SCRIPT']
+
+  unless File.executable?(command_path)
+    puts "Transition command at #{command_path} is not executable."
+    return
+  end
+
+  env = { 'I3_REWIND_TRANSITION' => transition, 'DISPLAY' => ENV['DISPLAY'] }
+  debug("Executing transition #{transition} script #{command_path}")
+  system(env, command_path)
+end
+
 # Main
 
 FileUtils.mkdir_p(File.dirname(SESSION_PATH))
@@ -195,6 +211,7 @@ unless system('which i3-msg > /dev/null 2>&1')
 end
 
 action = nil
+transition_script = nil
 OptionParser.new do |opts|
   opts.banner = "Usage: #{__FILE__} [options]"
   opts.on('-s', '--save', 'Save the current session') do
@@ -207,6 +224,9 @@ OptionParser.new do |opts|
 
   opts.on('-w', '--watch', 'Watch for monitor changes and save/restore session') do
     action = :watch
+  end
+  opts.on('-t', '--transition PATH', 'Path to script to execute between transitions') do |path|
+    transition_script = path
   end
 
   opts.on('-h', '--help', 'Prints this help') do
@@ -235,7 +255,7 @@ when :restore
   end
   exit
 when :watch
-  stage = :monitor_outputs
+  stage = :only_primary
   loop do
     session = current_session
 
@@ -249,7 +269,11 @@ when :watch
                 :restore_outputs
               end
     when :restore_outputs
-      restore_session(load_session(SESSION_PATH), session)
+      if File.exist?(SESSION_PATH)
+        restore_session(load_session(SESSION_PATH), session)
+      end
+
+      shell_inform_transition('to_multi_monitor', transition_script)
       stage = :monitor_outputs
     when :wait_outputs
       stage = if all_outputs_connected?(session)
@@ -261,7 +285,7 @@ when :watch
       dump_session(session, SESSION_PATH)
       if only_one_output_connected?(session)
         disconnect_non_connected_outputs(session)
-        i3_mode('default')
+        shell_inform_transition('to_primary_monitor', transition_script)
         stage = :only_primary
       elsif all_outputs_connected?(session)
         stage = :monitor_outputs
@@ -270,7 +294,7 @@ when :watch
       end
     end
 
-    sleep 1
+    sleep 5
   end
 when nil
   puts 'No action specified'
