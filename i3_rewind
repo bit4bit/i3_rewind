@@ -42,9 +42,7 @@ def dump_session(session, session_path)
 end
 
 def only_one_output_connected?(session)
-  one_connected = session['outputs'].any? { |_, output| output['connected'] }
-  connected_outputs = session['connected_outputs'].all? {|_, output| output['connected']}
-  (connected_outputs == false && one_connected) || session['connected_outputs'].count == 1
+  session['connected_outputs'].count == 1
 end
 
 def disconnect_non_connected_outputs(session)
