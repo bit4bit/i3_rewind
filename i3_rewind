@@ -5,8 +5,8 @@ require 'optparse'
 require 'etc'
 require 'fcntl'
 
-SESSION_PATH = "#{ENV['HOME']}/.config/i3/i3_session.json"
-LOCK_FILE = "/tmp/i3_session_#{Etc.getlogin}.lock"
+SESSION_PATH = "#{ENV['HOME']}/.config/i3/i3_rewind.json"
+LOCK_FILE = "/tmp/i3_rewind_#{Etc.getlogin}.lock"
 
 def debug(message)
   puts message if ENV['DEBUG']
@@ -140,7 +140,7 @@ end
 def current_outputs
   outputs = {}
   xrandr_output = `xrandr --query`
-  
+
   xrandr_output.lines.each do |line|
     next unless line =~ /^(\S+) (connected|disconnected)\s*(primary\s*)?(\d+)x(\d+)\+(\d+)\+(\d+)/
 
