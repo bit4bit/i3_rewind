@@ -59,8 +59,8 @@ def all_outputs_connected?(session)
   session['outputs'].all? { |_, output| output['connected'] }
 end
 
-def restore_session(session, current_session)
-  restore_outputs(session['outputs'], current_session['connected_outputs'])
+def restore_session(session, last_session)
+  restore_outputs(session['outputs'], last_session['connected_outputs'])
   restore_i3(session['i3'])
 end
 
@@ -157,7 +157,6 @@ def current_outputs
 end
 
 def restore_outputs(outputs, current_outputs)
-
   outputs.each do |name, output|
     next if current_outputs[name]['connected'] == false
 
@@ -273,12 +272,12 @@ when :watch
                 :wait_outputs
               end
     when :monitor_outputs
-      dump_session(session, SESSION_PATH)
       if only_one_output_connected?(session)
         disconnect_non_connected_outputs(session)
         shell_inform_transition('to_primary_monitor', transition_script)
         stage = :only_primary
       elsif all_outputs_connected?(session)
+        dump_session(session, SESSION_PATH)
         stage = :monitor_outputs
       else
         stage = :wait_outputs
